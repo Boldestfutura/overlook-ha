@@ -14,7 +14,7 @@ import { LitElement, html, css, svg, nothing, keyed } from "./lit-all.min.js";
 import { TABLET_PAGES, tabletPage, tabletSheets, TABLET_CSS, wave } from "./tablet.js";
 import { createPip, shakeDetector } from "./pip.js";
 
-const VERSION = "0.33.1";
+const VERSION = "0.33.2";
 // Two builds come out of this one file (deploy.py): the room screens' full-screen card
 // (overlook-show) and the HACS phone cards (dist/meridian.js, meridian-*). esbuild sets
 // MERIDIAN_BUILD to "show" or "phone"; served as it is, the file registers everything.
@@ -5904,6 +5904,55 @@ class MeridianPip extends OverlookPiece {
 }
 definePhone("pip", MeridianPip);
 
+// a countdown to one moment: artwork on top, big gradient digits ticking every second underneath.
+// config: target (ISO time with offset), image (url), when (caption under the digits), done (text once it's passed)
+class MeridianCountdown extends LitElement {
+  static get properties() { return { hass: { attribute: false }, _now: { state: true } }; }
+  static getConfigForm() {
+    return { schema: [
+      { name: "target", required: true, selector: { text: {} } },
+      { name: "image", selector: { text: {} } },
+      { type: "grid", name: "", schema: [{ name: "when", selector: { text: {} } }, { name: "done", selector: { text: {} } }] },
+    ], computeLabel: (s) => ({ target: "Counts down to (ISO time, e.g. 2026-11-19T00:00:00+11:00)", image: "Artwork URL", when: "Caption", done: "Text once it's here" })[s.name] };
+  }
+  static getStubConfig() { return { target: "2026-12-25T00:00:00+11:00", when: "Christmas Day" }; }
+  setConfig(c) { if (!c || !c.target) throw new Error("target is required"); this._config = c; }
+  getCardSize() { return 5; }
+  getGridOptions() { return { columns: "full", rows: "auto" }; }
+  connectedCallback() { super.connectedCallback(); this._now = Date.now(); this._t = setInterval(() => { this._now = Date.now(); }, 1000); }
+  disconnectedCallback() { super.disconnectedCallback(); clearInterval(this._t); }
+  render() {
+    if (!this._config) return nothing;
+    const c = this._config, left = Math.max(0, Math.floor((Date.parse(c.target) - (this._now || Date.now())) / 1000));
+    const two = (n) => String(n).padStart(2, "0");
+    const units = [[Math.floor(left / 86400), "Days"], [Math.floor(left % 86400 / 3600), "Hours"], [Math.floor(left % 3600 / 60), "Mins"], [left % 60, "Secs"]];
+    return html`<ha-card>
+      ${c.image ? html`<div class="art" style="background-image:url('${c.image}')"></div>` : nothing}
+      <div class="band">
+        ${left > 0 ? html`<div class="row">${units.map(([n, l], i) => html`${i ? html`<i>:</i>` : nothing}<div class="u"><b>${two(n)}</b><span>${l}</span></div>`)}</div>`
+          : html`<div class="done">${c.done || "It's here"}</div>`}
+        ${c.when ? html`<div class="when">${c.when}</div>` : nothing}
+      </div></ha-card>`;
+  }
+  static styles = css`
+    ha-card { overflow: hidden; border-radius: 26px; border: 0; background: #1b0f30; color: #fff; }
+    .art { position: relative; aspect-ratio: 16 / 9; background: center top / cover no-repeat; }
+    .art::after { content: ""; position: absolute; inset: auto 0 0 0; height: 45%; background: linear-gradient(to bottom, transparent, #2a1646); }
+    .band { background: linear-gradient(to bottom, #2a1646, #1b0f30); padding: 2px 14px 16px; text-align: center; }
+    .row { display: flex; justify-content: center; align-items: flex-start; gap: 4px; }
+    .u { display: flex; flex-direction: column; align-items: center; min-width: 0; flex: 1; max-width: 92px; }
+    b, i, .done { font-family: "Amazon Ember Display", "Amazon Ember", system-ui, sans-serif; font-weight: 800; font-style: normal;
+      background: linear-gradient(to bottom, #ffd36b 0%, #ff8a3d 38%, #ff4f9a 72%, #b65cff 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    b { font-size: clamp(36px, 13vw, 58px); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    i { font-size: clamp(28px, 10vw, 44px); line-height: 1.1; opacity: 0.7; }
+    .u span { margin-top: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(255, 255, 255, 0.72); }
+    .done { font-size: clamp(36px, 12vw, 56px); line-height: 1.1; padding: 6px 0; }
+    .when { margin-top: 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.8); }
+  `;
+}
+definePhone("countdown", MeridianCountdown);
+
 window.customCards = window.customCards || [];
 if (BUILD === "phone" || BUILD === "all") window.customCards.push(
   { type: "meridian-tile", name: "Meridian tile", description: "A light, switch, speaker, heat pump, plant, sensor or scene, with its own pop-up", preview: true },
@@ -5912,6 +5961,7 @@ if (BUILD === "phone" || BUILD === "all") window.customCards.push(
   { type: "meridian-status", name: "Meridian status", description: "People, alerts and house readings as pills, each with a pop-up" },
   { type: "meridian-favourites", name: "Meridian favourites", description: "Your most-used controls for this time of day, picked by Home Assistant", preview: true },
   { type: "meridian-edit-button", name: "Meridian edit button", description: "Hides the dashboard header and puts an Edit dashboard button at the bottom" },
+  { type: "meridian-countdown", name: "Meridian countdown", description: "Counts down to a date and time, with artwork and big ticking digits" },
   { type: "meridian-pip", name: "Meridian Pip", description: "Pip the sprout: a tamagotchi pet that lives on the house's sensors. Tap to open, three taps to pet" },
 );
 if (BUILD === "show" || BUILD === "all") window.customCards.push({ type: "overlook-show", name: "Overlook Show", description: "Full-screen kitchen display" });

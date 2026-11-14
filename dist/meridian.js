@@ -3205,7 +3205,7 @@ function shakeDetector(onShake) {
 }
 
 // www/overlook-show.js
-var VERSION = "0.33.1";
+var VERSION = "0.33.2";
 var BUILD = false ? "all" : "phone";
 var ALIASES = typeof MERIDIAN_ALIASES === "undefined" ? true : MERIDIAN_ALIASES;
 var define = (tag, cls) => {
@@ -9424,6 +9424,71 @@ var MeridianPip = class extends OverlookPiece {
   `];
 };
 definePhone("pip", MeridianPip);
+var MeridianCountdown = class extends dt {
+  static get properties() {
+    return { hass: { attribute: false }, _now: { state: true } };
+  }
+  static getConfigForm() {
+    return { schema: [
+      { name: "target", required: true, selector: { text: {} } },
+      { name: "image", selector: { text: {} } },
+      { type: "grid", name: "", schema: [{ name: "when", selector: { text: {} } }, { name: "done", selector: { text: {} } }] }
+    ], computeLabel: (s2) => ({ target: "Counts down to (ISO time, e.g. 2026-11-19T00:00:00+11:00)", image: "Artwork URL", when: "Caption", done: "Text once it's here" })[s2.name] };
+  }
+  static getStubConfig() {
+    return { target: "2026-12-25T00:00:00+11:00", when: "Christmas Day" };
+  }
+  setConfig(c2) {
+    if (!c2 || !c2.target) throw new Error("target is required");
+    this._config = c2;
+  }
+  getCardSize() {
+    return 5;
+  }
+  getGridOptions() {
+    return { columns: "full", rows: "auto" };
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    this._now = Date.now();
+    this._t = setInterval(() => {
+      this._now = Date.now();
+    }, 1e3);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this._t);
+  }
+  render() {
+    if (!this._config) return J;
+    const c2 = this._config, left = Math.max(0, Math.floor((Date.parse(c2.target) - (this._now || Date.now())) / 1e3));
+    const two = (n2) => String(n2).padStart(2, "0");
+    const units = [[Math.floor(left / 86400), "Days"], [Math.floor(left % 86400 / 3600), "Hours"], [Math.floor(left % 3600 / 60), "Mins"], [left % 60, "Secs"]];
+    return Z`<ha-card>
+      ${c2.image ? Z`<div class="art" style="background-image:url('${c2.image}')"></div>` : J}
+      <div class="band">
+        ${left > 0 ? Z`<div class="row">${units.map(([n2, l2], i2) => Z`${i2 ? Z`<i>:</i>` : J}<div class="u"><b>${two(n2)}</b><span>${l2}</span></div>`)}</div>` : Z`<div class="done">${c2.done || "It's here"}</div>`}
+        ${c2.when ? Z`<div class="when">${c2.when}</div>` : J}
+      </div></ha-card>`;
+  }
+  static styles = o`
+    ha-card { overflow: hidden; border-radius: 26px; border: 0; background: #1b0f30; color: #fff; }
+    .art { position: relative; aspect-ratio: 16 / 9; background: center top / cover no-repeat; }
+    .art::after { content: ""; position: absolute; inset: auto 0 0 0; height: 45%; background: linear-gradient(to bottom, transparent, #2a1646); }
+    .band { background: linear-gradient(to bottom, #2a1646, #1b0f30); padding: 2px 14px 16px; text-align: center; }
+    .row { display: flex; justify-content: center; align-items: flex-start; gap: 4px; }
+    .u { display: flex; flex-direction: column; align-items: center; min-width: 0; flex: 1; max-width: 92px; }
+    b, i, .done { font-family: "Amazon Ember Display", "Amazon Ember", system-ui, sans-serif; font-weight: 800; font-style: normal;
+      background: linear-gradient(to bottom, #ffd36b 0%, #ff8a3d 38%, #ff4f9a 72%, #b65cff 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    b { font-size: clamp(36px, 13vw, 58px); line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    i { font-size: clamp(28px, 10vw, 44px); line-height: 1.1; opacity: 0.7; }
+    .u span { margin-top: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(255, 255, 255, 0.72); }
+    .done { font-size: clamp(36px, 12vw, 56px); line-height: 1.1; padding: 6px 0; }
+    .when { margin-top: 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.8); }
+  `;
+};
+definePhone("countdown", MeridianCountdown);
 window.customCards = window.customCards || [];
 if (BUILD === "phone" || BUILD === "all") window.customCards.push(
   { type: "meridian-tile", name: "Meridian tile", description: "A light, switch, speaker, heat pump, plant, sensor or scene, with its own pop-up", preview: true },
@@ -9432,6 +9497,7 @@ if (BUILD === "phone" || BUILD === "all") window.customCards.push(
   { type: "meridian-status", name: "Meridian status", description: "People, alerts and house readings as pills, each with a pop-up" },
   { type: "meridian-favourites", name: "Meridian favourites", description: "Your most-used controls for this time of day, picked by Home Assistant", preview: true },
   { type: "meridian-edit-button", name: "Meridian edit button", description: "Hides the dashboard header and puts an Edit dashboard button at the bottom" },
+  { type: "meridian-countdown", name: "Meridian countdown", description: "Counts down to a date and time, with artwork and big ticking digits" },
   { type: "meridian-pip", name: "Meridian Pip", description: "Pip the sprout: a tamagotchi pet that lives on the house's sensors. Tap to open, three taps to pet" }
 );
 if (BUILD === "show" || BUILD === "all") window.customCards.push({ type: "overlook-show", name: "Overlook Show", description: "Full-screen kitchen display" });
