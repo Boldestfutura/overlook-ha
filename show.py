@@ -158,7 +158,7 @@ CARD.update({
     "swipe": ["media", "home", "rooms", "recipes"],
     # idle: the time, weather, who's home and what's next over the darkened slideshow
     "photo_clock": True,
-    "night": "input_boolean.bedroom_night_mode",
+    "night": "binary_sensor.kitchen_dark",
     # the washing machine bubble beside the clock (input_select kept by automation washing_machine)
     "washer": {"entity": "input_select.washing_machine", "started": "input_datetime.washing_machine_started",
                "alert": "input_boolean.washing_machine_alert"},
